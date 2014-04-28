@@ -1,0 +1,131 @@
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <title>ハワイ支社config(抜粋)</title>
+</head>
+<body>
+<pre>
+interfaces {
+    ethernet eth1 {
+        address 192.168.55.10/24  ... (1) IPsecトンネルを張るインターフェースの
+                                          IPアドレスを指定する。
+    }
+    vti vti0 {
+        address 192.168.55.10/32  ... (2) IPsecトンネルのための仮想インター
+                                          フェース（vti）を作成し、それぞれIPア
+                                          ドレスを割り当てる。(1)と同様のアドレ
+                                          スにしておいたほうがよい。ただし、プレ
+                                          フィックス長は/32に変更する。
+        description "to honsya-vpn"
+        mtu 1280                  ... (3) MTU値は1280バイトに指定しておく。
+    }
+}
+nat {                             ... (4) VPNを通る通信に対してNAT変換を行う。自
+                                          サイトから他のサイトに向かうパケットに
+                                          ついては宛先IPアドレスの変換を行い
+                                          （source部）、逆に自サイトに入ってくる
+                                          パケットについては送信元IPアドレスの変
+                                          換を行う（destination部）。NATによるア
+                                          ドレス変換を要しない場合は、省略するこ
+                                          とができる。
+    destination {
+        rule 10 {
+            destination {
+                address 172.32.1.0/24
+            }
+            inbound-interface vti0
+            translation {
+                address 192.168.55.0/24
+            }
+        }
+    }
+    source {
+        rule 10 {
+            outbound-interface vti0
+            source {
+                address 192.168.55.0/24
+            }
+            translation {
+                address 172.32.1.0/24
+            }
+        }
+    }
+}
+protocols {
+    static {                            ... (5) デフォルトルートと、VPNのための
+                                                個別のスタティックルートを設定す
+                                                る。
+        interface-route 172.32.0.0/24 {
+            next-hop-interface vti0 {
+            }
+        }
+        interface-route 172.32.2.0/24 {
+            next-hop-interface vti0 {
+            }
+        }
+        route 0.0.0.0/0 {
+            next-hop 192.168.0.254 {
+            }
+        }
+    }
+}
+vpn {
+    ipsec {
+        esp-group ESP-1 {               ... (6) IPsecのIKEおよびESPで用いる、暗
+                                                号アルゴリズムとパラメータの定義
+                                                を行う。IPsecを張るサイト間で同
+                                                様の設定にしなければならない。
+            compression disable
+            lifetime 1800
+            mode tunnel
+            pfs enable
+            proposal 1 {
+                encryption aes256
+                hash sha1
+            }
+        }
+        ike-group IKE-1 {
+            lifetime 3600
+            proposal 1 {
+                dh-group 5
+                encryption aes256
+                hash sha1
+            }
+        }
+        ipsec-interfaces {
+            interface eth1
+        }
+        nat-traversal enable
+        site-to-site {
+            peer 192.0.2.13 {           ... (7) IPsecの相手先のグローバルIPアド
+                                                レスを指定する。
+                authentication {
+                    id @aloha-vpn       ... (8) IPsecにおいて、相手側と自分側を
+                                                識別する、一意な値（local ID）
+                                                を設定する。VPNルーターのホスト
+                                                名などを指定するとよい。
+                    mode pre-shared-secret
+                    pre-shared-secret test_vpn_key_1
+                    remote-id @honsya-vpn   ... (9) 相手側を識別する、一意な値
+                                                    （remote ID）を指定する。
+                }
+                connection-type initiate
+                default-esp-group ESP-1
+                description "to honsya-vpn"
+                ike-group IKE-1
+                local-address 192.168.55.10   ... (10) 自身のVPNルーター側のIP
+                                                       アドレスを指定する。前述
+                                                       の(1)と同じIPアドレスを
+                                                       指定しておく。
+                vti {
+                    bind vti0                 ... (11) このIPsecの設定に紐づ
+                                                       く、vtiインターフェース
+                                                       を指定する。
+                }
+            }
+        }
+    }
+}
+</pre>
+</body>
+</html>
